@@ -1,22 +1,32 @@
 name: Release
 
 on:
- push:
-   branches:
-     - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
 
 jobs:
- release:
-   runs-on: ubuntu-latest
-   steps:
-     - uses: actions/checkout@v4
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-     - uses: actions/setup-node@v4
-       with:
-         node-version: 18
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22   # ✅ FINAL REQUIRED VERSION
 
-     - run: npm install
+      - run: npm install
 
-     - run: npx semantic-release
-       env:
-         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Fix permissions
+        run: chmod +x ./node_modules/.bin/semantic-release
+
+      - name: Run semantic release
+        run: ./node_modules/.bin/semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
