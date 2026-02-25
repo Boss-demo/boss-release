@@ -99,6 +99,20 @@ def apply_threshold_logic(counts, current_version):
 
     return boss_major, boss_minor, boss_incremental
 
+def get_latest_boss_tag():
+    url = f"https://api.github.com/repos/{ORG}/boss-release/releases/latest"
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        return (1, 0, 0)  # default if first release
+
+    tag = response.json()["tag_name"]
+    match = re.match(r"v(\d+)\.(\d+)\.(\d+)", tag)
+
+    if not match:
+        return (1, 0, 0)
+
+    return tuple(map(int, match.groups()))
 # -------------------------
 # Main
 # -------------------------
@@ -126,7 +140,7 @@ def main():
     print(counts)
 
     # Example current BOSS version (temporary hardcoded)
-    current_version = (1, 0, 0)
+    current_version = get_latest_boss_tag()
 
     new_version = apply_threshold_logic(counts, current_version)
 
