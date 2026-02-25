@@ -60,6 +60,23 @@ def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
+def create_boss_release(version):
+    url = f"https://api.github.com/repos/{ORG}/boss-release/releases"
+    payload = {
+        "tag_name": f"v{version}",
+        "name": f"v{version}",
+        "body": "Auto-generated BOSS release",
+        "draft": False,
+        "prerelease": False
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    if response.status_code in [200, 201]:
+        print("BOSS Release Created Successfully")
+    else:
+        print("Release creation skipped or failed:", response.text)
+
 # -------------------------
 # Threshold Logic
 # -------------------------
@@ -68,7 +85,7 @@ def apply_threshold_logic(counts, current_version, any_repo_changed):
     major, minor, inc = current_version
 
     if not any_repo_changed:
-        return major, minor, inc  # no change
+        return major, minor, inc
 
     # Always increment incremental first
     inc += 1
@@ -115,7 +132,9 @@ def apply_threshold_logic(counts, current_version, any_repo_changed):
 def main():
     state = load_state()
 
-    current_boss_version = tuple(map(int, state["boss_version"].split(".")))
+    current_version_tuple = tuple(map(int, state["boss_version"].split(".")))
+    old_version_str = state["boss_version"]
+
     last_tags = state["last_processed_tags"]
 
     counts = {
@@ -138,7 +157,6 @@ def main():
         tier = parsed[3]
 
         if repo not in last_tags:
-            # first time seen → treat as change
             counts[tier]["major"] += 1
             any_repo_changed = True
         else:
@@ -151,11 +169,22 @@ def main():
 
     print("Delta Counts:", counts)
 
-    new_version = apply_threshold_logic(counts, current_boss_version, any_repo_changed)
+    new_version_tuple = apply_threshold_logic(
+        counts,
+        current_version_tuple,
+        any_repo_changed
+    )
 
-    print("New BOSS Version:", f"{new_version[0]}.{new_version[1]}.{new_version[2]}")
+    new_version_str = f"{new_version_tuple[0]}.{new_version_tuple[1]}.{new_version_tuple[2]}"
 
-    state["boss_version"] = f"{new_version[0]}.{new_version[1]}.{new_version[2]}"
+    print("Old Version:", old_version_str)
+    print("New Version:", new_version_str)
+
+    if new_version_str != old_version_str:
+        print("Version changed. Creating BOSS release...")
+        create_boss_release(new_version_str)
+
+    state["boss_version"] = new_version_str
     state["last_processed_tags"] = last_tags
 
     save_state(state)
