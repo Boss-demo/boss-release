@@ -19,22 +19,23 @@ headers = {
     "Accept": "application/vnd.github.v3+json"
 }
 
+# -------------------------
+# Fetch Latest Tag
+# -------------------------
 def get_latest_release(repo):
     url = f"https://api.github.com/repos/{ORG}/{repo}/releases/latest"
     response = requests.get(url, headers=headers)
     if response.status_code != 200:
-        print(f"Failed to fetch {repo}")
         return None
     return response.json()["tag_name"]
 
+# -------------------------
+# Parse Tag
+# -------------------------
 def parse_tag(tag):
-    """
-    Example: v1.2.3-tier2
-    """
     match = re.match(r"v(\d+)\.(\d+)\.(\d+)-(tier\d)", tag)
     if not match:
         return None
-
     major, minor, patch, tier = match.groups()
     return {
         "major": int(major),
@@ -43,14 +44,10 @@ def parse_tag(tag):
         "tier": tier
     }
 
+# -------------------------
+# Classify Change
+# -------------------------
 def classify_change(version):
-    """
-    Simple classification:
-    If patch > 0 → patch
-    If minor > 0 → minor
-    If major > 0 → major
-    (Later we refine by comparing previous tag)
-    """
     if version["major"] > 0:
         return "major"
     elif version["minor"] > 0:
@@ -58,6 +55,53 @@ def classify_change(version):
     else:
         return "patch"
 
+# -------------------------
+# Decision Engine
+# -------------------------
+def apply_threshold_logic(counts, current_version):
+    boss_major, boss_minor, boss_incremental = current_version
+
+    # Always increment incremental
+    boss_incremental += 1
+
+    # Tier1 rules
+    if counts["tier1"]["major"] >= 1:
+        boss_major += 1
+        boss_minor = 0
+        boss_incremental = 0
+
+    elif counts["tier1"]["minor"] >= 1:
+        boss_minor += 1
+        boss_incremental = 0
+
+    # Tier2 rules
+    elif counts["tier2"]["major"] >= 2:
+        boss_major += 1
+        boss_minor = 0
+        boss_incremental = 0
+
+    elif counts["tier2"]["major"] >= 1:
+        boss_minor += 1
+        boss_incremental = 0
+
+    elif counts["tier2"]["minor"] >= 2:
+        boss_minor += 1
+        boss_incremental = 0
+
+    # Tier3 rules
+    elif counts["tier3"]["major"] >= 1:
+        boss_minor += 1
+        boss_incremental = 0
+
+    elif counts["tier3"]["minor"] >= 3:
+        boss_minor += 1
+        boss_incremental = 0
+
+    return boss_major, boss_minor, boss_incremental
+
+# -------------------------
+# Main
+# -------------------------
 def main():
     counts = {
         "tier1": {"major": 0, "minor": 0, "patch": 0},
@@ -76,18 +120,25 @@ def main():
 
         tier = parsed["tier"]
         impact = classify_change(parsed)
-
         counts[tier][impact] += 1
 
     print("Tier Count Summary:")
     print(counts)
 
-    # ✅ Write manifest properly here
-    with open("boss-manifest.json", "w") as f:
-        json.dump(counts, f, indent=2)
+    # Example current BOSS version (temporary hardcoded)
+    current_version = (1, 0, 0)
 
-    
+    new_version = apply_threshold_logic(counts, current_version)
+
+    print("New BOSS Version:", f"{new_version[0]}.{new_version[1]}.{new_version[2]}")
+
+    manifest = {
+        "counts": counts,
+        "boss_version": f"{new_version[0]}.{new_version[1]}.{new_version[2]}"
+    }
+
+    with open("boss-manifest.json", "w") as f:
+        json.dump(manifest, f, indent=2)
 
 if __name__ == "__main__":
     main()
-
