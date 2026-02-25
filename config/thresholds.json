@@ -1,0 +1,12 @@
+{
+  "repos": [
+    {
+      "name": "boss-release",
+      "owner": "vidhyadharan-03"
+    }
+  ],
+  "rules": {
+    "min_commits": 1,
+    "max_open_prs": 50
+  }
+}
