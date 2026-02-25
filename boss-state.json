@@ -1,4 +1,10 @@
 {
-  "boss_version": "1.5.0",
-  "last_processed_tags": {}
+  "boss_version": "2.0.0",
+  "last_processed_tags": {
+    "auth-service": "v1.1.1-tier1",
+    "payment-service": "v1.0.0-tier1",
+    "order-service": "v1.0.0-tier2",
+    "inventory-service": "v1.0.0-tier2",
+    "notification-service": "v1.0.0-tier3"
+  }
 }
