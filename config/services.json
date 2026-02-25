@@ -1,0 +1,10 @@
+{
+  "org": "Boss-demo",
+  "repos": [
+    "auth-service",
+    "order-service",
+    "inventory-service",
+    "notification-service",
+    "boss-release"
+  ]
+}
