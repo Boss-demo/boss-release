@@ -4,13 +4,18 @@ import os
 from datetime import datetime, timezone
 
 # -----------------------------
-# Load configs
+# Load services config
 # -----------------------------
 with open("config/services.json") as f:
     services_cfg = json.load(f)
 
+# -----------------------------
+# Load thresholds config (UPDATED)
+# -----------------------------
 with open("config/thresholds.json") as f:
-    thresholds = json.load(f)
+    config = json.load(f)
+
+thresholds = config["thresholds"]
 
 ORG = services_cfg["org"]
 REPOS = services_cfg["repos"]
@@ -22,13 +27,14 @@ HEADERS = {
 }
 
 # -----------------------------
-# Helper: get latest tag
+# Helper: get latest release
 # -----------------------------
 def get_latest_release(repo):
     url = f"https://api.github.com/repos/{ORG}/{repo}/releases/latest"
     r = requests.get(url, headers=HEADERS)
 
     if r.status_code != 200:
+        print(f"⚠️ No release found for {repo}")
         return None
 
     data = r.json()
@@ -45,14 +51,17 @@ def classify(version):
     if not version:
         return "patch"
 
-    v = version.lstrip("v").split(".")
-    major, minor, patch = map(int, v)
+    try:
+        v = version.lstrip("v").split(".")
+        major, minor, patch = map(int, v)
 
-    if major > 1:
-        return "major"
-    elif minor > 0:
-        return "minor"
-    else:
+        if major > 1:
+            return "major"
+        elif minor > 0:
+            return "minor"
+        else:
+            return "patch"
+    except Exception:
         return "patch"
 
 # -----------------------------
@@ -83,6 +92,8 @@ if counts["major"] >= thresholds["major"]:
     boss_bump = "major"
 elif counts["minor"] >= thresholds["minor"]:
     boss_bump = "minor"
+elif counts["patch"] >= thresholds["patch"]:
+    boss_bump = "patch"
 
 # -----------------------------
 # Create manifest

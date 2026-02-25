@@ -5,8 +5,9 @@
       "owner": "vidhyadharan-03"
     }
   ],
-  "rules": {
-    "min_commits": 1,
-    "max_open_prs": 50
+  "thresholds": {
+    "major": 1,
+    "minor": 2,
+    "patch": 3
   }
 }
