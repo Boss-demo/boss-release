@@ -10,9 +10,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -22,22 +26,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Run Tier Count Engine
-      - name: Run aggregation
+      # Run Delta-Based Aggregation Engine
+      - name: Run aggregation engine
         run: python scripts/count_engine.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Ensure manifest file exists (temporary placeholder if needed)
-      - name: Create manifest file
+      # Commit updated boss-state.json if changed
+      - name: Commit updated state
         run: |
-          if [ ! -f boss-manifest.json ]; then
-            echo "{}" > boss-manifest.json
-          fi
-
-      # Upload artifact
-      - name: Upload manifest
-        uses: actions/upload-artifact@v4
-        with:
-          name: boss-manifest
-          path: boss-manifest.json
+          git config user.name "boss-bot"
+          git config user.email "boss-bot@users.noreply.github.com"
+          git add boss-state.json
+          git commit -m "chore: update boss state" || echo "No changes to commit"
+          git push

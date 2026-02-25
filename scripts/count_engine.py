@@ -5,6 +5,7 @@ import json
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 ORG = "Boss-demo"
+STATE_FILE = "boss-state.json"
 
 REPOS = [
     "auth-service",
@@ -20,8 +21,9 @@ headers = {
 }
 
 # -------------------------
-# Fetch Latest Tag
+# Helpers
 # -------------------------
+
 def get_latest_release(repo):
     url = f"https://api.github.com/repos/{ORG}/{repo}/releases/latest"
     response = requests.get(url, headers=headers)
@@ -29,130 +31,134 @@ def get_latest_release(repo):
         return None
     return response.json()["tag_name"]
 
-# -------------------------
-# Parse Tag
-# -------------------------
 def parse_tag(tag):
     match = re.match(r"v(\d+)\.(\d+)\.(\d+)-(tier\d)", tag)
     if not match:
         return None
     major, minor, patch, tier = match.groups()
-    return {
-        "major": int(major),
-        "minor": int(minor),
-        "patch": int(patch),
-        "tier": tier
-    }
+    return int(major), int(minor), int(patch), tier
 
-# -------------------------
-# Classify Change
-# -------------------------
-def classify_change(version):
-    if version["major"] > 0:
+def classify_delta(old, new):
+    old_major, old_minor, old_patch, _ = parse_tag(old)
+    new_major, new_minor, new_patch, _ = parse_tag(new)
+
+    if new_major > old_major:
         return "major"
-    elif version["minor"] > 0:
+    elif new_minor > old_minor:
         return "minor"
-    else:
+    elif new_patch > old_patch:
         return "patch"
+    return None
+
+def load_state():
+    if not os.path.exists(STATE_FILE):
+        return {"boss_version": "1.0.0", "last_processed_tags": {}}
+    with open(STATE_FILE, "r") as f:
+        return json.load(f)
+
+def save_state(state):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
 
 # -------------------------
-# Decision Engine
+# Threshold Logic
 # -------------------------
-def apply_threshold_logic(counts, current_version):
-    boss_major, boss_minor, boss_incremental = current_version
 
-    # Always increment incremental
-    boss_incremental += 1
+def apply_threshold_logic(counts, current_version, any_repo_changed):
+    major, minor, inc = current_version
 
-    # Tier1 rules
+    if not any_repo_changed:
+        return major, minor, inc  # no change
+
+    # Always increment incremental first
+    inc += 1
+
+    # Tier1
     if counts["tier1"]["major"] >= 1:
-        boss_major += 1
-        boss_minor = 0
-        boss_incremental = 0
+        major += 1
+        minor = 0
+        inc = 0
 
     elif counts["tier1"]["minor"] >= 1:
-        boss_minor += 1
-        boss_incremental = 0
+        minor += 1
+        inc = 0
 
-    # Tier2 rules
+    # Tier2
     elif counts["tier2"]["major"] >= 2:
-        boss_major += 1
-        boss_minor = 0
-        boss_incremental = 0
+        major += 1
+        minor = 0
+        inc = 0
 
     elif counts["tier2"]["major"] >= 1:
-        boss_minor += 1
-        boss_incremental = 0
+        minor += 1
+        inc = 0
 
     elif counts["tier2"]["minor"] >= 2:
-        boss_minor += 1
-        boss_incremental = 0
+        minor += 1
+        inc = 0
 
-    # Tier3 rules
+    # Tier3
     elif counts["tier3"]["major"] >= 1:
-        boss_minor += 1
-        boss_incremental = 0
+        minor += 1
+        inc = 0
 
     elif counts["tier3"]["minor"] >= 3:
-        boss_minor += 1
-        boss_incremental = 0
+        minor += 1
+        inc = 0
 
-    return boss_major, boss_minor, boss_incremental
+    return major, minor, inc
 
-def get_latest_boss_tag():
-    url = f"https://api.github.com/repos/{ORG}/boss-release/releases/latest"
-    response = requests.get(url, headers=headers)
-
-    if response.status_code != 200:
-        return (1, 0, 0)  # default if first release
-
-    tag = response.json()["tag_name"]
-    match = re.match(r"v(\d+)\.(\d+)\.(\d+)", tag)
-
-    if not match:
-        return (1, 0, 0)
-
-    return tuple(map(int, match.groups()))
 # -------------------------
-# Main
+# Main Engine
 # -------------------------
+
 def main():
+    state = load_state()
+
+    current_boss_version = tuple(map(int, state["boss_version"].split(".")))
+    last_tags = state["last_processed_tags"]
+
     counts = {
         "tier1": {"major": 0, "minor": 0, "patch": 0},
         "tier2": {"major": 0, "minor": 0, "patch": 0},
         "tier3": {"major": 0, "minor": 0, "patch": 0},
     }
 
+    any_repo_changed = False
+
     for repo in REPOS:
-        tag = get_latest_release(repo)
-        if not tag:
+        latest_tag = get_latest_release(repo)
+        if not latest_tag:
             continue
 
-        parsed = parse_tag(tag)
+        parsed = parse_tag(latest_tag)
         if not parsed:
             continue
 
-        tier = parsed["tier"]
-        impact = classify_change(parsed)
-        counts[tier][impact] += 1
+        tier = parsed[3]
 
-    print("Tier Count Summary:")
-    print(counts)
+        if repo not in last_tags:
+            # first time seen → treat as change
+            counts[tier]["major"] += 1
+            any_repo_changed = True
+        else:
+            delta = classify_delta(last_tags[repo], latest_tag)
+            if delta:
+                counts[tier][delta] += 1
+                any_repo_changed = True
 
-    # Example current BOSS version (temporary hardcoded)
-    current_version = get_latest_boss_tag()
+        last_tags[repo] = latest_tag
 
-    new_version = apply_threshold_logic(counts, current_version)
+    print("Delta Counts:", counts)
+
+    new_version = apply_threshold_logic(counts, current_boss_version, any_repo_changed)
 
     print("New BOSS Version:", f"{new_version[0]}.{new_version[1]}.{new_version[2]}")
 
-    manifest = {
-        "counts": counts,
-        "boss_version": f"{new_version[0]}.{new_version[1]}.{new_version[2]}"
-    }
+    state["boss_version"] = f"{new_version[0]}.{new_version[1]}.{new_version[2]}"
+    state["last_processed_tags"] = last_tags
 
-    with open("boss-manifest.json", "w") as f:
-        json.dump(manifest, f, indent=2)
+    save_state(state)
 
 if __name__ == "__main__":
     main()
