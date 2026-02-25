@@ -16,13 +16,26 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install -r requirements.txt
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
+      # Run Tier Count Engine
       - name: Run aggregation
-        run: python scripts/aggregate.py
+        run: python scripts/count_engine.py
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Ensure manifest file exists (temporary placeholder if needed)
+      - name: Create manifest file
+        run: |
+          if [ ! -f boss-manifest.json ]; then
+            echo "{}" > boss-manifest.json
+          fi
+
+      # Upload artifact
       - name: Upload manifest
         uses: actions/upload-artifact@v4
         with:
